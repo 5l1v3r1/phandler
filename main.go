@@ -8,10 +8,8 @@ import (
 
 	pkgHelm "github.com/masahiro331/phandler/pkg/helm"
 	"github.com/pkg/errors"
-)
-
-var (
-	Config *PhandlerConfig
+	"k8s.io/helm/pkg/chartutil"
+	"k8s.io/helm/pkg/helm"
 )
 
 const (
@@ -19,12 +17,14 @@ const (
 	InternalServerError = `{"status": 500, "message":"Insternal server error"}`
 )
 
+var Config *PhandlerConfig
+
 type Deployment struct {
-	ImageName string `json:"image_name"`
-	ImageTag  string `json:"image_tag"`
-	Replica   string `json:"replica"`
-	Endpoint  string `json:"endpoint"`
-	Port      string `json:"port"`
+	ReleaseName string `json:"release_name"`
+	Chart       string `json:"chart"`
+	// Replica     string `json:"replica"`
+	// Endpoint    string `json:"endpoint"`
+	// Port        string `json:"port"`
 }
 
 type ResponseBody struct {
@@ -33,16 +33,17 @@ type ResponseBody struct {
 }
 
 func main() {
+	Config = NewPhandlerConfig(Namespace)
+	if Config == nil {
+		log.Fatalf("[FATAL] %+v", Config)
+	}
+	fmt.Print(Config)
 	if err := run(); err != nil {
 		log.Fatalf("[FATAL] %+v", err)
 	}
 }
 
 func run() error {
-	Config, err := NewPhandlerConfig(Namespace)
-	if err != nil {
-		return errors.Wrap(err, "")
-	}
 	fmt.Print(Config)
 	http.HandleFunc("/deployment", DeploymentHandler)
 	return http.ListenAndServe(":8080", nil)
@@ -58,13 +59,25 @@ func DeploymentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Print(helmClient)
 	var deployment Deployment
 	if err := json.NewDecoder(r.Body).Decode(&deployment); err != nil {
 		HandleError(w, http.StatusBadRequest, err)
 		return
 	}
-	fmt.Printf("%+v", deployment)
+	installOpts := []helm.InstallOption{
+		helm.InstallDisableHooks(false),
+		helm.InstallTimeout(30),
+		// helm.ReleaseName(""),
+	}
+	chartRequested, err := chartutil.Load(deployment.Chart)
+	result, err := helmClient.InstallReleaseFromChart(chartRequested, "default", installOpts...)
+	fmt.Printf("%+v", result)
+
+	if err != nil {
+		log.Printf("%+v", errors.Wrapf(err, "[ERROR] Failed to install %s", deployment.Chart))
+		HandleInternalServerError(w)
+		return
+	}
 
 	rb := &ResponseBody{
 		Status:  200,

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -19,21 +20,23 @@ type PhandlerConfig struct {
 	kubernetesConfig    *rest.Config
 }
 
-func NewPhandlerConfig(kubernetesNamespace string) (*PhandlerConfig, error) {
+func NewPhandlerConfig(kubernetesNamespace string) *PhandlerConfig {
 	config, err := getOutClusterConfig()
 	if err != nil {
-		return nil, errors.Wrap(err, "")
+		log.Print(err)
+		return nil
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, errors.Wrap(err, "")
+		log.Print(err)
+		return nil
 	}
 	return &PhandlerConfig{
 		kubernetesNamespace: kubernetesNamespace,
 		kubernetesConfig:    config,
 		kubernetesClientSet: clientset,
-	}, nil
+	}
 
 }
 
